@@ -1,0 +1,7 @@
+Strategies {
+    everyMinute : "0 * * * * ?"
+    default = everyChange
+}
+Items {
+    gOcfPersist* : strategy = everyChange, everyMinute, restoreOnStartup
+}

@@ -1,0 +1,103 @@
+// Правила discovery, onboarding та CRUDN для OCF-шлюзу.
+// Шлюз: http://ocf-gateway:8090/api  (див. README, розділ "HTTP API").
+
+val GW = "http://ocf-gateway:8090/api"
+
+rule "OCF: ініціалізація"
+when
+    System reached start level 100
+then
+    OCF_Discover.postUpdate(OFF)
+    OCF_OnboardAll.postUpdate(OFF)
+    OCF_ResetLamp.postUpdate(OFF)
+    Plug_AddSchedule.postUpdate(OFF)
+    Plug_DelSchedule.postUpdate(OFF)
+    if (OCF_FilterResult.state == NULL) OCF_FilterResult.postUpdate("—")
+    sendHttpPostRequest(GW + "/discover", "text/plain", "", 15000)
+end
+
+rule "OCF: періодичний multicast discovery"
+when
+    Time cron "30 */2 * * * ?"
+then
+    sendHttpPostRequest(GW + "/discover", "text/plain", "", 15000)
+end
+
+rule "OCF: discovery за кнопкою"
+when
+    Item OCF_Discover received command ON
+then
+    val res = sendHttpPostRequest(GW + "/discover", "text/plain", "", 15000)
+    logInfo("ocf", "discovery: " + if (res !== null) res.length + " bytes" else "no response")
+    OCF_Discover.postUpdate(OFF)
+end
+
+rule "OCF: фільтр discovery за rt"
+when
+    Item OCF_RT_Filter received command
+then
+    val rt = receivedCommand.toString
+    // multicast GET /oic/res?rt=<rt>: відповідають лише пристрої з таким типом ресурсу
+    sendHttpPostRequest(GW + "/discover?rt=" + rt, "text/plain", "", 15000)
+    logInfo("ocf", "discovery filter rt=" + rt)
+end
+
+rule "OCF: onboarding усіх пристроїв"
+when
+    Item OCF_OnboardAll received command ON
+then
+    val res = sendHttpPostRequest(GW + "/onboard/all", "text/plain", "", 60000)
+    logInfo("ocf", "onboarding: " + res)
+    OCF_OnboardAll.postUpdate(OFF)
+end
+
+rule "OCF: RESET лампи"
+when
+    Item OCF_ResetLamp received command ON
+then
+    sendHttpPostRequest(GW + "/reset/lamp", "text/plain", "", 15000)
+    OCF_ResetLamp.postUpdate(OFF)
+end
+
+rule "OCF: CREATE розкладу"
+when
+    Item Plug_AddSchedule received command ON
+then
+    val res = sendHttpPostRequest(GW + "/schedule", "text/plain", "", 15000)
+    logInfo("ocf", "CREATE schedule: " + res)
+    Plug_AddSchedule.postUpdate(OFF)
+end
+
+rule "OCF: DELETE розкладу"
+when
+    Item Plug_DelSchedule received command ON
+then
+    val res = sendHttpDeleteRequest(GW + "/schedule", 15000)
+    logInfo("ocf", "DELETE schedule: " + res)
+    Plug_DelSchedule.postUpdate(OFF)
+end
+
+rule "OCF: перевірка безпеки пристроїв"
+when
+    Item Lamp_Sec changed or
+    Item Sensor_Sec changed or
+    Item Plug_Sec changed
+then
+    var bad = ""
+    if (!Lamp_Sec.state.toString.startsWith("RFNOP"))   bad = bad + " lamp"
+    if (!Sensor_Sec.state.toString.startsWith("RFNOP")) bad = bad + " sensor"
+    if (!Plug_Sec.state.toString.startsWith("RFNOP"))   bad = bad + " plug"
+    if (bad == "") {
+        OCF_SecAlert.postUpdate("усі пристрої в RFNOP, керування лише через DTLS")
+    } else {
+        OCF_SecAlert.postUpdate("не провізіоновані:" + bad)
+        logWarn("ocf", "devices not in RFNOP:" + bad)
+    }
+end
+
+rule "OCF: новий пристрій у мережі"
+when
+    Item OCF_DeviceCount changed
+then
+    logInfo("ocf", "OCF devices: " + previousState + " -> " + OCF_DeviceCount.state)
+end

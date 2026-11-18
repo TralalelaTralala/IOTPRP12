@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OCF Resource Browser</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --mut:#94a3b8; --acc:#38bdf8; --ok:#22c55e; --warn:#f59e0b; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI",Roboto,Arial,sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:19px; margin:0 12px 0 0; }
+  button, select, input { font:inherit; color:var(--text); background:#0b1222; border:1px solid var(--line); border-radius:7px; padding:5px 10px; }
+  button { cursor:pointer; background:#0c4a6e; border-color:#0369a1; }
+  button.sec { background:#14532d; border-color:#15803d; }
+  button.del { background:#7f1d1d; border-color:#b91c1c; }
+  button:hover { filter:brightness(1.2); }
+  main { display:grid; grid-template-columns: 1fr 380px; gap:16px; padding:16px 20px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .dev { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:14px; }
+  .dev h2 { margin:0; font-size:17px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:20px; border:1px solid var(--line); color:var(--mut); }
+  .RFNOP { color:var(--ok); border-color:var(--ok); } .RFOTM { color:var(--warn); border-color:var(--warn); } .RFPRO { color:var(--acc); border-color:var(--acc); }
+  .meta { color:var(--mut); font-size:12.5px; margin:4px 0 8px; font-family:Consolas,monospace; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { border-top:1px solid var(--line); padding:5px 6px; text-align:left; vertical-align:top; }
+  th { color:var(--mut); font-weight:500; }
+  code, .mono { font-family:Consolas,"Cascadia Mono",monospace; font-size:12.5px; }
+  .rt { color:#fbbf24; } .if { color:#a5b4fc; }
+  .val { color:#86efac; font-family:Consolas,monospace; font-size:12.5px; }
+  aside { display:flex; flex-direction:column; gap:14px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .panel h3 { margin:0 0 8px; font-size:15px; }
+  #out { white-space:pre-wrap; max-height:260px; overflow:auto; font-family:Consolas,monospace; font-size:12px; background:#020617; border-radius:8px; padding:8px; margin:0; }
+  #log { height:330px; overflow:auto; font-family:Consolas,monospace; font-size:12px; background:#020617; border-radius:8px; padding:8px; }
+  #log div { white-space:normal; word-break:break-word; padding:1px 0; }
+  .k-onboarding { color:#86efac; } .k-error { color:var(--bad); } .k-discovery { color:#7dd3fc; } .k-notify { color:#94a3b8; } .k-security { color:#fca5a5; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OCF Resource Browser</h1>
+  <div class="row">
+    <select id="rt">
+      <option value="">усі rt</option>
+      <option>oic.r.switch.binary</option><option>oic.r.light.brightness</option><option>oic.r.temperature</option>
+      <option>oic.r.humidity</option><option>oic.r.energy.consumption</option><option>oic.wk.col</option><option>oic.wk.d</option>
+    </select>
+    <button onclick="discover()">Multicast discovery</button>
+    <button class="sec" onclick="onboardAll()">Onboarding усіх</button>
+  </div>
+  <span class="badge" id="sum"></span>
+</header>
+<main>
+  <section id="devs"></section>
+  <aside>
+    <div class="panel"><h3>Результат операції</h3><pre id="out">—</pre></div>
+    <div class="panel"><h3>Журнал (discovery · onboarding · CRUDN · notify)</h3><div id="log"></div></div>
+  </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let devices = [];
+
+async function api(method, url, body) {
+  const r = await fetch(url, {method, headers: body ? {'Content-Type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
+  const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t; }
+  $('#out').textContent = method + ' ' + url + '\n' + (typeof j === 'string' ? j : JSON.stringify(j, null, 2));
+  return j;
+}
+
+function fmtVal(v) { return v ? esc(JSON.stringify(v)) : ''; }
+
+function render() {
+  $('#sum').textContent = devices.length + ' пристроїв · ' + devices.reduce((a, d) => a + d.links.length, 0) + ' ресурсів';
+  $('#devs').innerHTML = devices.map(d => `
+    <div class="dev">
+      <h2>${esc(d.name)} <span class="badge">${esc(d.device.rt[1])}</span> <span class="badge ${d.state}">${d.state}</span>
+        <span class="badge">owned: ${d.doxm.owned ? 'так' : 'ні'}</span> ${d.secure ? '<span class="badge RFNOP">DTLS PSK</span>' : ''}
+        <span style="flex:1"></span>
+        ${d.doxm.owned ? `<button class="del" onclick="resetDev('${d.name}')">RESET</button>` : `<button class="sec" onclick="onboard('${d.name}')">Onboarding</button>`}
+      </h2>
+      <div class="meta">di ${esc(d.di)} · [${esc(d.ip)}] · ${esc(d.platform.mnmn)} ${esc(d.platform.mnmo)} fw ${esc(d.platform.mnfv)} · ${esc(d.device.icv)}</div>
+      <table><tr><th>href</th><th>rt / if</th><th>значення</th><th></th></tr>
+      ${d.links.filter(l => !l.href.startsWith('/oic/res')).map(l => `
+        <tr><td class="mono">${esc(l.href)}</td>
+            <td><span class="rt">${esc(l.rt.join(', '))}</span><br><span class="if">${esc(l.if.join(', '))}</span></td>
+            <td class="val">${fmtVal(d.values[l.href])}</td>
+            <td class="row">
+              <select id="if-${d.name}${l.href}">${l.if.map(i => `<option>${esc(i)}</option>`).join('')}</select>
+              <button onclick="retrieve('${d.name}','${l.href}')">R</button>
+              ${l.rt.includes('oic.r.switch.binary') ? `<button onclick="update('${d.name}','${l.href}',{value:!(d_val('${d.name}','${l.href}','value'))})">U</button>` : ''}
+              ${l.rt.includes('oic.r.light.brightness') ? `<button onclick="update('${d.name}','${l.href}',{brightness:Math.floor(Math.random()*100)})">U</button>` : ''}
+              ${l.rt.includes('x.org.iotprp12.schedules') ? `<button class="sec" onclick="createSch()">C</button>` : ''}
+              ${l.rt.includes('x.org.iotprp12.schedule') ? `<button class="del" onclick="del('${d.name}','${l.href}')">D</button>` : ''}
+            </td></tr>`).join('')}
+      </table>
+    </div>`).join('');
+}
+
+function d_val(n, h, k) { const d = devices.find(x => x.name === n); return d && d.values[h] ? d.values[h][k] : false; }
+
+async function refresh() { devices = await (await fetch('/api/devices')).json(); render(); }
+async function discover() {
+  const rt = $('#rt').value;
+  await api('POST', '/api/discover' + (rt ? '?rt=' + encodeURIComponent(rt) : ''));
+  if (!rt) refresh();
+}
+async function onboard(n) { await api('POST', '/api/onboard/' + n); refresh(); }
+async function onboardAll() { await api('POST', '/api/onboard/all'); refresh(); }
+async function resetDev(n) { await api('POST', '/api/reset/' + n); refresh(); }
+async function retrieve(n, h) { const i = document.getElementById('if-' + n + h).value; await api('GET', `/api/res/${n}${h}?if=${i}`); refresh(); }
+async function update(n, h, body) { await api('POST', `/api/res/${n}${h}`, body); refresh(); }
+async function createSch() { await api('POST', '/api/schedule'); refresh(); }
+async function del(n, h) { await api('DELETE', `/api/res/${n}${h}`); refresh(); }
+
+const es = new EventSource('/api/events');
+es.onmessage = e => {
+  const ev = JSON.parse(e.data), div = document.createElement('div');
+  div.className = 'k-' + ev.kind; div.textContent = `${ev.t} ${ev.kind}: ${ev.text}`; div.title = div.textContent;
+  const log = $('#log'); log.appendChild(div); log.scrollTop = log.scrollHeight;
+  if (ev.kind === 'notify' && ev.name) {
+    const d = devices.find(x => x.name === ev.name);
+    if (d) { d.values[ev.href] = ev.rep; render(); }
+  }
+};
+refresh(); setInterval(refresh, 10000);
+</script>
+</body>
+</html>

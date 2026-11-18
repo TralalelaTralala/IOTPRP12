@@ -1,0 +1,65 @@
+# Практична робота 12.2, варіант 5 — OCF Standard Integration (CRUDN, discovery, security) + openHAB.
+#   Basic UI:          http://localhost:8085/basicui/app?sitemap=ocf
+#   OCF resource browser / HTTP API:  http://localhost:8090/
+x-ocf-device: &ocf-device
+  build: ./ocf-device
+  restart: unless-stopped
+  networks: [ocf]
+
+services:
+  lamp:
+    <<: *ocf-device
+    container_name: iotprp12-lamp
+    environment: { DEVICE: lamp, NAME: lamp }
+  sensor:
+    <<: *ocf-device
+    container_name: iotprp12-sensor
+    environment: { DEVICE: sensor, NAME: sensor }
+  plug:
+    <<: *ocf-device
+    container_name: iotprp12-plug
+    environment: { DEVICE: plug, NAME: plug }
+
+  ocf-gateway:
+    build: ./ocf-gateway
+    container_name: iotprp12-gateway
+    restart: unless-stopped
+    depends_on: [lamp, sensor, plug]
+    networks: [ocf]
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      OPENHAB_URL: "http://openhab:8080"
+    volumes:
+      - obt_data:/data          # облікові дані Onboarding Tool (PSK власника)
+
+  openhab:
+    image: openhab/openhab:4.2.2
+    container_name: iotprp12-openhab
+    restart: unless-stopped
+    networks: [ocf]
+    ports:
+      - "127.0.0.1:8085:8080"
+    environment:
+      USER_ID: "9001"
+      GROUP_ID: "9001"
+      CRYPTO_POLICY: "unlimited"
+      EXTRA_JAVA_OPTS: "-Duser.timezone=Europe/Kyiv"
+    volumes:
+      - ./openhab/conf:/openhab/conf
+      - openhab_userdata:/openhab/userdata
+      - openhab_addons:/openhab/addons
+
+# OCF discovery працює через IPv6 multicast ff02::158, тому мережа з IPv6
+networks:
+  ocf:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd12:12::/64
+        - subnet: 172.30.13.0/24
+
+volumes:
+  obt_data:
+  openhab_userdata:
+  openhab_addons:

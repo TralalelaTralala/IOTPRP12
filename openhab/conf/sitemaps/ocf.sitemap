@@ -1,0 +1,45 @@
+sitemap ocf label="OCF Resource Browser: CRUDN · Discovery · Security" {
+
+    Frame label="Пристрої OCF (семантична модель: Дім → Кімната → Equipment → Point)" {
+        Switch item=Lamp_Switch
+        Slider item=Lamp_Brightness
+        Text   item=Sensor_Temperature
+        Text   item=Sensor_Humidity
+        Switch item=Plug_Switch
+        Text   item=Plug_Power
+        Text   item=Plug_Energy
+    }
+
+    Frame label="Discovery (multicast CoAP ff02::158, /oic/res)" {
+        Switch item=OCF_Discover mappings=[ON="Знайти"]
+        Text   item=OCF_DeviceCount valuecolor=[==3="green", <3="orange"]
+        Text   item=OCF_Discovered
+        Switch item=OCF_RT_Filter mappings=["oic.r.switch.binary"="switch", "oic.r.temperature"="temperature", "oic.r.energy.consumption"="energy", "oic.wk.col"="колекції"]
+        Text   item=OCF_FilterResult
+    }
+
+    Frame label="Безпека (doxm · pstat · cred · acl2 · DTLS)" {
+        Text   item=Lamp_Sec   valuecolor=[==RFNOP="green"]
+        Text   item=Sensor_Sec
+        Text   item=Plug_Sec
+        Text   item=OCF_SecAlert
+        Switch item=OCF_OnboardAll mappings=[ON="Onboarding"]
+        Switch item=OCF_ResetLamp  mappings=[ON="RESET"]
+    }
+
+    Frame label="CRUDN" {
+        Text   item=Plug_Schedules
+        Switch item=Plug_AddSchedule mappings=[ON="CREATE"]
+        Switch item=Plug_DelSchedule mappings=[ON="DELETE"]
+        Text   item=OCF_Notifications
+        Text   item=OCF_LastEvent
+    }
+
+    Frame label="Тренди (NOTIFY → RRD4j)" {
+        Chart item=gOcfPersist period=h refresh=10000 legend=true
+    }
+
+    Frame label="Resource browser (OCF-шлюз)" {
+        Webview url="http://localhost:8090/" height=18
+    }
+}

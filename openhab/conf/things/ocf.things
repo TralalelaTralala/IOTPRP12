@@ -1,0 +1,16 @@
+// OCF-пристрої в openHAB через HTTP binding ("HTTP simulation" CoAP binding).
+// HTTP binding опитує агрегований стан шлюзу (/api/state) і надсилає команди (/api/cmd/*),
+// шлюз перетворює їх на CoAP UPDATE (POST) по coaps (DTLS PSK) до OCF-ресурсу.
+// Миттєві зміни (OCF NOTIFY / Observe) шлюз додатково публікує в items через REST API openHAB.
+Thing http:url:ocf "OCF Gateway (HTTP ↔ CoAP)" [ baseURL="http://ocf-gateway:8090/api", refresh=3, timeout=4000, commandMethod="POST", contentType="text/plain" ] {
+    Channels:
+        Type switch : lamp_switch        "Лампа: oic.r.switch.binary"        [ stateExtension="/state", stateTransformation="JSONPATH:$.lamp.switch", commandExtension="/cmd/lamp_switch", onValue="true", offValue="false" ]
+        Type dimmer : lamp_brightness    "Лампа: oic.r.light.brightness"     [ stateExtension="/state", stateTransformation="JSONPATH:$.lamp.brightness", commandExtension="/cmd/lamp_brightness" ]
+        Type number : sensor_temperature "Датчик: oic.r.temperature"         [ stateExtension="/state", stateTransformation="JSONPATH:$.sensor.temperature", mode="READONLY" ]
+        Type number : sensor_humidity    "Датчик: oic.r.humidity"            [ stateExtension="/state", stateTransformation="JSONPATH:$.sensor.humidity", mode="READONLY" ]
+        Type switch : plug_switch        "Розетка: oic.r.switch.binary"      [ stateExtension="/state", stateTransformation="JSONPATH:$.plug.switch", commandExtension="/cmd/plug_switch", onValue="true", offValue="false" ]
+        Type number : plug_power         "Розетка: oic.r.energy.consumption" [ stateExtension="/state", stateTransformation="JSONPATH:$.plug.power", mode="READONLY" ]
+        Type number : plug_energy        "Розетка: energy"                   [ stateExtension="/state", stateTransformation="JSONPATH:$.plug.energy", mode="READONLY" ]
+        Type number : devices            "Знайдено пристроїв"                [ stateExtension="/state", stateTransformation="JSONPATH:$.devices", mode="READONLY" ]
+        Type number : notifications      "OCF NOTIFY"                        [ stateExtension="/state", stateTransformation="JSONPATH:$.notifications", mode="READONLY" ]
+}

@@ -1,0 +1,56 @@
+// OCF-пристрої в семантичній моделі openHAB (Location -> Equipment -> Point).
+// Метадані простору імен "ocf" описують відповідність OCF Resource Model:
+//   ocf="<rt>" [ href, prop, if, di ... ]  —  тип ресурсу (oic.r.*), шлях, властивість, інтерфейс, ідентифікатор пристрою.
+
+Group gHome       "Дім"        <house>   ["Location"]
+Group gLiving     "Вітальня"   <sofa>    (gHome) ["LivingRoom"]
+Group gKitchen    "Кухня"      <kitchen> (gHome) ["Kitchen"]
+Group gOcfPersist "OCF: історія"
+
+// ---------------- lamp: oic.d.light ----------------
+Group eLamp "Лампа (oic.d.light)" <light> (gLiving) ["Lightbulb"]
+    { ocf="oic.d.light" [ n="lamp", di="ea576c21-6e51-565d-a14d-248c4e2cfea9", icv="ocf.2.0.5", dmv="ocf.res.1.3.0,ocf.sh.1.3.0", mnmo="IOTPR-Lamp-L1" ] }
+Switch Lamp_Switch     "Лампа: увімкнення"   <light>  (eLamp) ["Switch", "Light"]
+    { channel="http:url:ocf:lamp_switch",     ocf="oic.r.switch.binary"    [ href="/lamp/switch", prop="value", if="oic.if.a", type="boolean", ops="RUN" ] }
+Dimmer Lamp_Brightness "Лампа: яскравість [%d %%]" <slider> (eLamp) ["Control", "Light"]
+    { channel="http:url:ocf:lamp_brightness", ocf="oic.r.light.brightness" [ href="/lamp/brightness", prop="brightness", if="oic.if.a", type="integer", min="0", max="100", ops="RUN" ] }
+String Lamp_Sec        "Лампа: безпека [%s]" <lock>   (eLamp) ["Status"]
+    { ocf="oic.r.pstat" [ href="/oic/sec/pstat", prop="dos.s" ] }
+
+// ---------------- sensor: oic.d.sensor ----------------
+Group eSensor "Кліматичний датчик (oic.d.sensor)" <temperature> (gKitchen) ["Sensor"]
+    { ocf="oic.d.sensor" [ n="sensor", di="132b5086-6e96-543e-9d1b-d19f82cb11e7", icv="ocf.2.0.5", mnmo="IOTPR-Climate-S2" ] }
+Number Sensor_Temperature "Температура [%.1f °C]" <temperature> (eSensor, gOcfPersist) ["Measurement", "Temperature"]
+    { channel="http:url:ocf:sensor_temperature", ocf="oic.r.temperature" [ href="/sensor/temperature", prop="temperature", units="C", if="oic.if.s", type="number", ops="RN" ] }
+Number Sensor_Humidity    "Вологість [%d %%]"     <humidity>    (eSensor, gOcfPersist) ["Measurement", "Humidity"]
+    { channel="http:url:ocf:sensor_humidity",    ocf="oic.r.humidity"    [ href="/sensor/humidity", prop="humidity", if="oic.if.s", type="integer", ops="RN" ] }
+String Sensor_Sec         "Датчик: безпека [%s]"  <lock>        (eSensor) ["Status"]
+    { ocf="oic.r.pstat" [ href="/oic/sec/pstat", prop="dos.s" ] }
+
+// ---------------- plug: oic.d.smartplug ----------------
+Group ePlug "Розумна розетка (oic.d.smartplug)" <poweroutlet> (gKitchen) ["PowerOutlet"]
+    { ocf="oic.d.smartplug" [ n="plug", di="0a9b144d-1785-5f23-a193-fc93846c10d8", icv="ocf.2.0.5", mnmo="IOTPR-Plug-P3" ] }
+Switch Plug_Switch "Розетка: увімкнення"      <poweroutlet> (ePlug) ["Switch", "Power"]
+    { channel="http:url:ocf:plug_switch", ocf="oic.r.switch.binary"      [ href="/plug/switch", prop="value", if="oic.if.a", type="boolean", ops="RUN" ] }
+Number Plug_Power  "Потужність [%.1f W]"      <energy>      (ePlug, gOcfPersist) ["Measurement", "Power"]
+    { channel="http:url:ocf:plug_power",  ocf="oic.r.energy.consumption" [ href="/plug/energy", prop="power", units="W", if="oic.if.s", ops="RN" ] }
+Number Plug_Energy "Енергія [%.3f Wh]"        <energy>      (ePlug, gOcfPersist) ["Measurement", "Energy"]
+    { channel="http:url:ocf:plug_energy", ocf="oic.r.energy.consumption" [ href="/plug/energy", prop="energy", units="Wh", if="oic.if.s", ops="RN" ] }
+Number Plug_Schedules "Розклади (/plug/schedules) [%d]" <time> (ePlug) ["Status"]
+    { ocf="oic.wk.col" [ href="/plug/schedules", rt="x.org.iotprp12.schedules", if="oic.if.ll,oic.if.create,oic.if.baseline", ops="CRD" ] }
+String Plug_Sec    "Розетка: безпека [%s]"    <lock>        (ePlug) ["Status"]
+    { ocf="oic.r.pstat" [ href="/oic/sec/pstat", prop="dos.s" ] }
+
+// ---------------- discovery / керування шлюзом ----------------
+Number OCF_DeviceCount   "Знайдено пристроїв [%d]"            <network>   { channel="http:url:ocf:devices" }
+String OCF_Discovered    "Пристрої [%s]"                      <network>
+Switch OCF_Discover      "Multicast discovery /oic/res"       <network>
+String OCF_RT_Filter     "Фільтр за типом ресурсу (rt)"       <zoom>
+String OCF_FilterResult  "Результат [%s]"                     <text>
+Switch OCF_OnboardAll    "Onboarding (Just Works + PSK)"      <lock>
+Switch OCF_ResetLamp     "RESET лампи (pstat dos.s=0)"        <lock>
+Switch Plug_AddSchedule  "CREATE розклад (oic.if.create)"     <time>
+Switch Plug_DelSchedule  "DELETE останній розклад"            <time>
+Number OCF_Notifications "OCF NOTIFY (Observe) [%d]"          <line>      { channel="http:url:ocf:notifications" }
+String OCF_LastEvent     "Остання подія [%s]"                 <text>
+String OCF_SecAlert      "Перевірка безпеки [%s]"             <shield>
